@@ -1,0 +1,19 @@
+# Core data stack
+pandas>=2.0
+geopandas>=0.14
+shapely>=2.0
+pyproj>=3.6
+fiona>=1.9
+
+# Geocoding
+geopy>=2.4
+
+# IO / HTTP
+requests>=2.31
+pyyaml>=6.0
+
+# Testing
+pytest>=8.0
+
+# Optional: speed-ups (install if available)
+rtree>=1.2
