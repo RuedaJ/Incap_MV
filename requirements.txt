@@ -5,6 +5,10 @@ shapely>=2.0
 pyproj>=3.6
 fiona>=1.9
 
+streamlit>=1.36
+pydeck>=0.8
+reportlab>=4.1
+
 # Geocoding
 geopy>=2.4
 
