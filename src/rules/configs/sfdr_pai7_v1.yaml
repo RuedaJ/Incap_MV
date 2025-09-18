@@ -1,0 +1,34 @@
+version: 1
+name: "SFDR PAI #7 (Biodiversity) – v1"
+description: >
+  Prototype rules for biodiversity-related flags and water proximity thresholds.
+  This is a placeholder, subject to refinement with compliance.
+
+inputs:
+  columns:
+    - SITECODE           # from Natura 2000 intersect
+    - CLC_CODE           # from CORINE overlay
+    - dist_water_m       # distance to nearest water body
+    - wfd_status         # Water Framework Directive status for nearest water body
+parameters:
+  water_near_threshold_m: 1000
+  biodiversity_high_if_in_natura2000: true
+  water_risk_if_status_bad_or_poor: [ "Bad", "Poor" ]
+outputs:
+  - biodiversity_category
+  - water_risk_category
+
+logic:
+  biodiversity:
+    - when: "SITECODE not null and biodiversity_high_if_in_natura2000"
+      then: "High"
+    - when: "CLC_CODE in ['111','112','121']"   # Example urban/industrial codes
+      then: "Medium"
+    - default: "Low"
+
+  water:
+    - when: "dist_water_m <= water_near_threshold_m and wfd_status in water_risk_if_status_bad_or_poor"
+      then: "High"
+    - when: "dist_water_m <= water_near_threshold_m"
+      then: "Medium"
+    - default: "Low"
