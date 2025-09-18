@@ -1,0 +1,44 @@
+name: Tests (pytest)
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install -r requirements.txt
+          # Ensure pytest is present (already in requirements, but just in case)
+          pip install pytest
+
+      - name: Run tests
+        env:
+          # Load defaults if you commit .env.example -> copy to .env in your repo to override
+          GEOCODER_USER_AGENT: ${{ secrets.GEOCODER_USER_AGENT || 'clm-mvp-ci/0.1' }}
+          DATA_DIR: data/eu
+          RULES_DIR: src/rules/configs
+        run: |
+          pytest -q
