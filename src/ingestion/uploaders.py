@@ -35,20 +35,29 @@ def read_csv(
     return gdf.drop(columns=["_geometry"])
 
 
-def read_geojson(
-    file_bytes: bytes, force_wgs84: bool = True
-) -> gpd.GeoDataFrame:
+def read_geojson(file_bytes: bytes, force_wgs84: bool = True) -> gpd.GeoDataFrame:
     """
-    Reads a GeoJSON (bytes) and returns a GeoDataFrame in WGS84.
+    Reads a GeoJSON (bytes) and returns a GeoDataFrame (handles FeatureCollection,
+    single Feature, or bare geometry). Defaults CRS to WGS84 if missing.
     """
     data = json.loads(file_bytes.decode("utf-8"))
-    gdf = gpd.GeoDataFrame.from_features(data["features"])
-    if force_wgs84:
-        # Many GeoJSON are already 4326, but be explicit when possible
-        if gdf.crs is None:
-            gdf.set_crs(WGS84, inplace=True)
-        else:
-            gdf = gdf.to_crs(WGS84)
+    if isinstance(data, dict) and data.get("type") == "FeatureCollection":
+        features = data.get("features", [])
+    elif isinstance(data, dict) and data.get("type") == "Feature":
+        features = [data]
+    elif isinstance(data, dict) and "type" in data and "coordinates" in data:
+        # bare geometry → wrap as Feature
+        features = [{"type": "Feature", "properties": {}, "geometry": data}]
+    else:
+        raise ValueError("Unsupported GeoJSON structure. Expect FeatureCollection or Feature.")
+
+    gdf = gpd.GeoDataFrame.from_features(features)
+
+    # Ensure CRS
+    if gdf.crs is None:
+        gdf.set_crs(WGS84, inplace=True)
+    if force_wgs84 and gdf.crs.to_string() != WGS84:
+        gdf = gdf.to_crs(WGS84)
     return gdf
 
 
