@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import io
 from typing import Optional
 
 import geopandas as gpd
@@ -105,9 +106,10 @@ def load_reference_data() -> dict[str, gpd.GeoDataFrame]:
 # -----------------------------
 def page_upload():
     st.header("Upload Portfolio – CSV or GeoJSON")
-    st.write("Upload a CSV (optionally with lat/lon) or a GeoJSON with point features.")
+    st.write("Upload a CSV (optionally with lat/lon) or a GeoJSON with point or polygon/line features.")
 
-    f = st.file_uploader("Choose a file", type=["csv", "geojson"])
+    # Accept .csv, .geojson, and .json (many exporters use .json for GeoJSON)
+    f = st.file_uploader("Choose a file", type=["csv", "geojson", "json"])
     lat_col = lon_col = None
     geocode_cols: list[str] = []
     geocode_enabled = False
@@ -122,24 +124,41 @@ def page_upload():
 
     if geocode_enabled:
         st.info("Select address columns to concatenate for geocoding.")
-        geocode_cols = st.multiselect(
-            "Address columns", options=[], default=[]
-        )
+        geocode_cols = st.multiselect("Address columns", options=[], default=[])
 
     if f:
         try:
-            if f.type == "text/csv" or f.name.lower().endswith(".csv"):
+            name = (f.name or "").lower()
+            mime = (f.type or "").lower()
+            raw = f.read()  # read once, reuse bytes
+
+            is_csv = name.endswith(".csv") or "csv" in mime
+            is_geojson = (
+                name.endswith(".geojson")
+                or name.endswith(".json")
+                or "geo+json" in mime
+                or ("json" in mime and not is_csv)
+            )
+
+            if is_csv:
                 gdf = read_csv(
-                    f.read(),
+                    raw,
                     lat_col=lat_col or None,
                     lon_col=lon_col or None,
                     crs=WGS84,
                 )
-                df = pd.read_csv(f)  # need to re-read for column names in UI
+                # For column pickers, parse columns from the same bytes
+                df = pd.read_csv(io.BytesIO(raw))
                 st.session_state["_last_csv_cols"] = list(df.columns)
+
+            elif is_geojson:
+                gdf = read_geojson(raw, force_wgs84=True)
+                st.session_state["_last_csv_cols"] = [c for c in gdf.columns if c != "geometry"]
+
             else:
-                gdf = read_geojson(f.read(), force_wgs84=True)
-                st.session_state["_last_csv_cols"] = list(gdf.columns)
+                raise ValueError(
+                    f"Unsupported file type: {name} ({mime}). Please upload CSV or GeoJSON."
+                )
 
             # If geocoding requested and no geometry
             if geocode_enabled and ("geometry" not in gdf or gdf.geometry.isna().all()):
@@ -158,10 +177,19 @@ def page_upload():
             st.subheader("Preview")
             st.dataframe(gdf.drop(columns="geometry", errors="ignore").head(25))
 
-            # Map preview
+            # Map preview (points vs polygons/lines)
             st.subheader("Map")
+            geom_types = set(str(t) for t in gdf.geometry.geom_type.dropna().unique())
+            is_all_points = geom_types.issubset({"Point", "MultiPoint"})
+            overlays = {}
+            points = None
+            if is_all_points:
+                points = gdf
+            else:
+                overlays["uploaded"] = gdf
+
             render_map(
-                layers=make_map_layers(points=gdf, overlays={}),
+                layers=make_map_layers(points=points, overlays=overlays),
                 height=500,
             )
 
@@ -242,6 +270,7 @@ def page_overlays_and_screen(refs: dict[str, gpd.GeoDataFrame]):
 
             # Normalize combined risk (biodiversity & water) using worst-of
             order = {"Low": 0, "Medium": 1, "High": 2, None: -1}
+
             def worst(a, b):
                 return a if order.get(a, -1) >= order.get(b, -1) else b
 
