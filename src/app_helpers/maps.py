@@ -56,8 +56,22 @@ def make_map_layers(
             )
         )
 
+    # NEW: uploaded non-point geometries rendered as GeoJSON overlay
+    if "uploaded" in overlays:
+        layers.append(
+            pdk.Layer(
+                "GeoJsonLayer",
+                _to_geojson_features(overlays["uploaded"]),
+                stroked=True,
+                filled=False,
+                lineWidthMinPixels=1,
+                opacity=0.7,
+                pickable=True,
+            )
+        )
+
     # Points: portfolio/result
-    if points is not None:
+    if points is not None and not points.empty:
         pts = points.to_crs("EPSG:4326").copy()
         if risk_col and risk_col in pts.columns:
             color_map = {"High": [200, 30, 30], "Medium": [240, 180, 20], "Low": [30, 160, 60]}
